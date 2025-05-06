@@ -3,6 +3,7 @@
 <head>
     <title>Карта мусорных контейнеров Симферополя</title>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -31,23 +32,31 @@
         #map {
             margin-left: 300px;
             height: 100vh;
+            transition: margin-left 0.3s;
         }
         .toggle-sidebar {
             position: absolute;
-            right: -40px;
+            right: -45px;
             top: 10px;
             background: #fff;
             border: none;
             width: 40px;
             height: 40px;
             cursor: pointer;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+            border-radius: 0 5px 5px 0;
             z-index: 1001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #555;
         }
         .point-item {
-            padding: 8px;
+            padding: 10px;
             border-bottom: 1px solid #eee;
             cursor: pointer;
+            transition: background 0.2s;
         }
         .point-item:hover {
             background: #f5f5f5;
@@ -59,26 +68,97 @@
             margin-bottom: 15px;
         }
         .info {
-            padding: 6px 8px;
+            padding: 8px 12px;
             font: 14px/16px Arial, sans-serif;
             background: white;
-            background: rgba(255,255,255,0.9);
+            background: rgba(255,255,255,0.95);
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
             border-radius: 5px;
             max-width: 300px;
         }
         .info h4 {
-            margin: 0 0 5px;
+            margin: 0 0 8px;
             color: #333;
         }
         .hidden {
             transform: translateX(-100%);
         }
+        .map-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+        .map-control {
+            background: #fff;
+            border: none;
+            width: 40px;
+            height: 40px;
+            margin-bottom: 5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #555;
+        }
+        .legend-container {
+            position: absolute;
+            bottom: 40px;
+            right: 10px;
+            z-index: 1000;
+        }
+        .toggle-legend {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: #fff;
+            border: none;
+            width: 40px;
+            height: 40px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #555;
+            z-index: 1001;
+        }
+        .legend {
+            background: white;
+            background: rgba(255,255,255,0.95);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            margin-bottom: 10px;
+            max-width: 200px;
+        }
+        .legend.hidden {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            #sidebar {
+                width: 250px;
+            }
+            #map {
+                margin-left: 250px;
+            }
+            .legend {
+                max-width: 150px;
+                font-size: 12px;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <button class="toggle-sidebar"><i class="fas fa-bars"></i></button>
+        <button class="toggle-sidebar" title="Свернуть/развернуть панель"><i class="fas fa-chevron-left"></i></button>
         <h2>Мусорные контейнеры</h2>
         <div class="search-box">
             <input type="text" id="search" placeholder="Поиск по адресу..." style="width: 100%; padding: 8px;">
@@ -104,6 +184,24 @@
         </div>
     </div>
     <div id="map"></div>
+
+    <div class="map-controls">
+        <button class="map-control" id="zoom-in" title="Увеличить"><i class="fas fa-plus"></i></button>
+        <button class="map-control" id="zoom-out" title="Уменьшить"><i class="fas fa-minus"></i></button>
+    </div>
+
+    <div class="legend-container">
+        <div class="legend" id="legend">
+            <h4>Легенда</h4>
+            <i class="fas fa-trash-alt" style="color: blue;"></i> Асфальт<br>
+            <i class="fas fa-trash-alt" style="color: green;"></i> Бетон<br>
+            <i class="fas fa-trash-alt" style="color: purple;"></i> Асфальтобетон<br>
+            <i class="fas fa-trash-alt" style="color: orange;"></i> Другое покрытие<br>
+            <hr>
+            Кластеры показывают плотность объектов
+        </div>
+        <button class="toggle-legend" id="toggle-legend" title="Свернуть/развернуть легенду"><i class="fas fa-list"></i></button>
+    </div>
 
     <script>
         // Создаем карту с центром в Симферополе
@@ -255,31 +353,33 @@
 
         // Кнопка скрытия/показа боковой панели
         document.querySelector('.toggle-sidebar').addEventListener('click', function() {
-            document.getElementById('sidebar').classList.toggle('hidden');
-            if (document.getElementById('sidebar').classList.contains('hidden')) {
+            var sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('hidden');
+            
+            if (sidebar.classList.contains('hidden')) {
                 document.getElementById('map').style.marginLeft = '0';
+                this.innerHTML = '<i class="fas fa-chevron-right"></i>';
             } else {
-                document.getElementById('map').style.marginLeft = '300px';
+                document.getElementById('map').style.marginLeft = sidebar.offsetWidth + 'px';
+                this.innerHTML = '<i class="fas fa-chevron-left"></i>';
             }
             map.invalidateSize();
         });
 
-        // Добавляем легенду
-        var legend = L.control({position: 'bottomright'});
-        legend.onAdd = function(map) {
-            var div = L.DomUtil.create('div', 'info legend');
-            div.innerHTML = `
-                <h4>Легенда</h4>
-                <i class="fas fa-trash-alt" style="color: blue;"></i> Асфальт<br>
-                <i class="fas fa-trash-alt" style="color: green;"></i> Бетон<br>
-                <i class="fas fa-trash-alt" style="color: purple;"></i> Асфальтобетон<br>
-                <i class="fas fa-trash-alt" style="color: orange;"></i> Другое покрытие<br>
-                <hr>
-                Кластеры показывают плотность объектов
-            `;
-            return div;
-        };
-        legend.addTo(map);
+        // Кнопки увеличения/уменьшения масштаба
+        document.getElementById('zoom-in').addEventListener('click', function() {
+            map.zoomIn();
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', function() {
+            map.zoomOut();
+        });
+
+        // Кнопка скрытия/показа легенды
+        document.getElementById('toggle-legend').addEventListener('click', function() {
+            var legend = document.getElementById('legend');
+            legend.classList.toggle('hidden');
+        });
     </script>
 </body>
 </html>
