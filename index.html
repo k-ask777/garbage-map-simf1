@@ -145,6 +145,9 @@
         .panel.hidden {
             transform: translateX(-100%);
         }
+        .leaflet-container {
+            background: #f8f9fa !important;
+        }
         @media (max-width: 768px) {
             #sidebar {
                 width: 280px;
@@ -192,6 +195,7 @@
     <div class="map-controls">
         <button class="map-control" id="zoom-in" title="Увеличить"><i class="fas fa-plus"></i></button>
         <button class="map-control" id="zoom-out" title="Уменьшить"><i class="fas fa-minus"></i></button>
+        <button class="map-control" id="toggle-map" title="Переключить вид"><i class="fas fa-layer-group"></i></button>
     </div>
 
     <div class="legend-container">
@@ -209,15 +213,33 @@
 
     <script>
         // Создаем карту с центром в Симферополе
-        var map = L.map('map').setView([44.952116, 34.102411], 13);
-        
-        // Добавляем слой OpenStreetMap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        var map = L.map('map', {
+            renderer: L.canvas(), // Используем Canvas renderer для лучшей производительности
+            preferCanvas: true, // Используем Canvas для маркеров
+            zoomControl: false // Отключаем стандартный контрол зума
+        }).setView([44.952116, 34.102411], 13);
+
+        // Добавляем базовые слои
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        });
+
+        var satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+            maxZoom: 19
+        });
+
+        // Добавляем слой по умолчанию
+        osmLayer.addTo(map);
 
         // Создаем кластеризатор
-        var markers = L.markerClusterGroup();
+        var markers = L.markerClusterGroup({
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            disableClusteringAtZoom: 18
+        });
         var markerList = [];
 
         // Функция для создания HTML-контента всплывающего окна
@@ -258,7 +280,8 @@
                                 }; font-size: 18px;"></i>`,
                                 iconSize: [18, 18],
                                 className: 'my-div-icon'
-                            })
+                            }),
+                            renderer: L.canvas() // Используем Canvas для маркера
                         }).bindPopup(createPopupContent(props));
                         
                         markers.addLayer(marker);
@@ -291,7 +314,14 @@
         }
 
         // Загружаем данные при загрузке страницы
-        document.addEventListener('DOMContentLoaded', loadGeoJSONData);
+        document.addEventListener('DOMContentLoaded', function() {
+            loadGeoJSONData();
+            
+            // Принудительное обновление карты после загрузки
+            setTimeout(function() {
+                map.invalidateSize();
+            }, 100);
+        });
 
         // Поиск по адресу
         document.getElementById('search').addEventListener('input', function(e) {
@@ -365,7 +395,9 @@
             } else {
                 document.getElementById('map').style.marginLeft = '350px';
             }
-            map.invalidateSize();
+            setTimeout(function() {
+                map.invalidateSize();
+            }, 300);
         });
 
         // Кнопки увеличения/уменьшения масштаба
@@ -377,10 +409,38 @@
             map.zoomOut();
         });
 
+        // Кнопка переключения между картой и спутниковыми снимками
+        var currentLayer = osmLayer;
+        document.getElementById('toggle-map').addEventListener('click', function() {
+            if (currentLayer === osmLayer) {
+                map.removeLayer(osmLayer);
+                satelliteLayer.addTo(map);
+                currentLayer = satelliteLayer;
+                this.innerHTML = '<i class="fas fa-map"></i>';
+                this.title = "Переключить на карту";
+            } else {
+                map.removeLayer(satelliteLayer);
+                osmLayer.addTo(map);
+                currentLayer = osmLayer;
+                this.innerHTML = '<i class="fas fa-layer-group"></i>';
+                this.title = "Переключить на спутник";
+            }
+        });
+
         // Кнопка скрытия/показа легенды
         document.getElementById('toggle-legend').addEventListener('click', function() {
             var legend = document.getElementById('legend');
             legend.classList.toggle('hidden');
+        });
+
+        // Обработка проблем с загрузкой тайлов
+        map.on('tileerror', function(e) {
+            console.warn('Ошибка загрузки тайла:', e.url);
+        });
+
+        // Принудительное обновление карты при изменении размера окна
+        window.addEventListener('resize', function() {
+            map.invalidateSize();
         });
     </script>
 </body>
