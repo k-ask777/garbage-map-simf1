@@ -34,24 +34,6 @@
             height: 100vh;
             transition: margin-left 0.3s;
         }
-        .toggle-sidebar {
-            position: absolute;
-            right: -45px;
-            top: 10px;
-            background: #fff;
-            border: none;
-            width: 40px;
-            height: 40px;
-            cursor: pointer;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.2);
-            border-radius: 0 5px 5px 0;
-            z-index: 1001;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: #555;
-        }
         .point-item {
             padding: 10px;
             border-bottom: 1px solid #eee;
@@ -83,11 +65,52 @@
         .hidden {
             transform: translateX(-100%);
         }
+        .map-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+        .map-control {
+            background: #fff;
+            border: none;
+            width: 40px;
+            height: 40px;
+            margin-bottom: 5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #555;
+        }
         .legend-container {
             position: absolute;
             bottom: 40px;
             right: 10px;
             z-index: 1000;
+        }
+        .toggle-panel {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            background: #fff;
+            border: none;
+            width: 40px;
+            height: 40px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #555;
+            z-index: 1001;
         }
         .toggle-legend {
             position: absolute;
@@ -119,6 +142,9 @@
         .legend.hidden {
             display: none;
         }
+        .panel.hidden {
+            transform: translateX(-100%);
+        }
         @media (max-width: 768px) {
             #sidebar {
                 width: 280px;
@@ -134,8 +160,7 @@
     </style>
 </head>
 <body>
-    <div id="sidebar">
-        <button class="toggle-sidebar" title="Свернуть/развернуть панель"><i class="fas fa-chevron-left"></i></button>
+    <div id="sidebar" class="panel">
         <h2>Мусорные контейнеры</h2>
         <div class="search-box">
             <input type="text" id="search" placeholder="Поиск по адресу..." style="width: 100%; padding: 8px;">
@@ -161,6 +186,13 @@
         </div>
     </div>
     <div id="map"></div>
+
+    <button class="toggle-panel" id="toggle-panel" title="Свернуть/развернуть панель"><i class="fas fa-list"></i></button>
+
+    <div class="map-controls">
+        <button class="map-control" id="zoom-in" title="Увеличить"><i class="fas fa-plus"></i></button>
+        <button class="map-control" id="zoom-out" title="Уменьшить"><i class="fas fa-minus"></i></button>
+    </div>
 
     <div class="legend-container">
         <div class="legend" id="legend">
@@ -324,20 +356,25 @@
         }
 
         // Кнопка скрытия/показа боковой панели
-        document.querySelector('.toggle-sidebar').addEventListener('click', function() {
+        document.getElementById('toggle-panel').addEventListener('click', function() {
             var sidebar = document.getElementById('sidebar');
             sidebar.classList.toggle('hidden');
             
             if (sidebar.classList.contains('hidden')) {
                 document.getElementById('map').style.marginLeft = '0';
-                this.innerHTML = '<i class="fas fa-chevron-right"></i>';
-                this.style.right = '-45px';
-                this.style.borderRadius = '0 5px 5px 0';
             } else {
-                document.getElementById('map').style.marginLeft = sidebar.offsetWidth + 'px';
-                this.innerHTML = '<i class="fas fa-chevron-left"></i>';
+                document.getElementById('map').style.marginLeft = '350px';
             }
             map.invalidateSize();
+        });
+
+        // Кнопки увеличения/уменьшения масштаба
+        document.getElementById('zoom-in').addEventListener('click', function() {
+            map.zoomIn();
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', function() {
+            map.zoomOut();
         });
 
         // Кнопка скрытия/показа легенды
@@ -345,11 +382,6 @@
             var legend = document.getElementById('legend');
             legend.classList.toggle('hidden');
         });
-
-        // Добавляем стандартные кнопки масштабирования Leaflet
-        L.control.zoom({
-            position: 'topleft'
-        }).addTo(map);
     </script>
 </body>
 </html>
