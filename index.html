@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Карта мусорных контейнеров Симферополя</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 300px;
+            background: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            overflow-y: auto;
+            z-index: 1000;
+            padding: 15px;
+            transition: transform 0.3s;
+        }
+        #map {
+            margin-left: 300px;
+            height: 100vh;
+        }
+        .toggle-sidebar {
+            position: absolute;
+            right: -40px;
+            top: 10px;
+            background: #fff;
+            border: none;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1001;
+        }
+        .point-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .point-item:hover {
+            background: #f5f5f5;
+        }
+        .search-box {
+            margin-bottom: 15px;
+        }
+        .filter-options {
+            margin-bottom: 15px;
+        }
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, sans-serif;
+            background: white;
+            background: rgba(255,255,255,0.9);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            max-width: 300px;
+        }
+        .info h4 {
+            margin: 0 0 5px;
+            color: #333;
+        }
+        .hidden {
+            transform: translateX(-100%);
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <button class="toggle-sidebar"><i class="fas fa-bars"></i></button>
+        <h2>Мусорные контейнеры</h2>
+        <div class="search-box">
+            <input type="text" id="search" placeholder="Поиск по адресу..." style="width: 100%; padding: 8px;">
+        </div>
+        <div class="filter-options">
+            <h4>Фильтры:</h4>
+            <select id="type-filter" style="width: 100%; padding: 5px; margin-bottom: 5px;">
+                <option value="all">Все типы покрытия</option>
+                <option value="Асфальт">Асфальт</option>
+                <option value="Бетон">Бетон</option>
+                <option value="Асфальтобетон">Асфальтобетон</option>
+                <option value="Земля">Земля</option>
+            </select>
+            <select id="capacity-filter" style="width: 100%; padding: 5px;">
+                <option value="all">Любое количество контейнеров</option>
+                <option value="1-3">1-3 контейнера</option>
+                <option value="4-6">4-6 контейнеров</option>
+                <option value="7+">7+ контейнеров</option>
+            </select>
+        </div>
+        <div id="points-list">
+            <!-- Точки будут добавлены здесь -->
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        // Создаем карту
+        var map = L.map('map').setView([44.952116, 34.102411], 13);
+        
+        // Добавляем слой OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Создаем кластеризатор
+        var markers = L.markerClusterGroup();
+        var markerList = [];
+
+        // Функция для создания HTML-контента всплывающего окна
+        function createPopupContent(props) {
+            return `
+                <div class="info">
+                    <h4>Контейнер №${props['№п/п']}</h4>
+                    <b>Адрес:</b> ${props['Адрес']}<br>
+                    <b>Площадь:</b> ${props['Площ'] || 'н/д'} м²<br>
+                    <b>Контейнеров:</b> ${props['Смеш'] || 'н/д'}<br>
+                    <b>Покрытие:</b> ${props['покры'] || 'н/д'}<br>
+                    <b>Обслуживание:</b> ${props['Обслу'] || 'н/д'}<br>
+                    <b>Собственник:</b> ${props['Собст'] || 'н/д'}
+                </div>
+            `;
+        }
+
+        // Функция для загрузки GeoJSON данных
+        function loadGeoJSONData() {
+            fetch('Musor1.geojson')
+                .then(response => response.json())
+                .then(data => {
+                    // Обрабатываем каждую точку из GeoJSON
+                    data.features.forEach(function(feature) {
+                        var props = feature.properties;
+                        // Преобразуем координаты из EPSG:3857 в WGS84 (если нужно)
+                        var coords = feature.geometry.coordinates;
+                        var latLng = L.CRS.EPSG3857.unproject(L.point(coords[0], coords[1]));
+                        
+                        // Создаем маркер
+                        var marker = L.marker(latLng, {
+                            icon: L.divIcon({
+                                html: `<i class="fas fa-trash-alt" style="color: ${
+                                    props['покры'] === 'Асфальт' ? 'blue' : 
+                                    props['покры'] === 'Бетон' ? 'green' : 
+                                    props['покры'] === 'Асфальтобетон' ? 'purple' : 'orange'
+                                }; font-size: 18px;"></i>`,
+                                iconSize: [18, 18],
+                                className: 'my-div-icon'
+                            })
+                        }).bindPopup(createPopupContent(props));
+                        
+                        markers.addLayer(marker);
+                        markerList.push({
+                            marker: marker,
+                            props: props
+                        });
+
+                        // Добавляем точку в список
+                        var item = document.createElement('div');
+                        item.className = 'point-item';
+                        item.innerHTML = `
+                            <strong>№${props['№п/п']}</strong>: ${props['Адрес']}<br>
+                            <small>${props['покры'] || 'н/д'}, ${props['Смеш'] || 'н/д'} контейнеров</small>
+                        `;
+                        item.onclick = function() {
+                            map.setView(latLng, 18);
+                            marker.openPopup();
+                        };
+                        document.getElementById('points-list').appendChild(item);
+                    });
+
+                    // Добавляем кластер на карту
+                    map.addLayer(markers);
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки GeoJSON:', error);
+                    alert('Не удалось загрузить данные о мусорных контейнерах');
+                });
+        }
+
+        // Загружаем данные при загрузке страницы
+        document.addEventListener('DOMContentLoaded', loadGeoJSONData);
+
+        // Поиск по адресу
+        document.getElementById('search').addEventListener('input', function(e) {
+            var searchText = e.target.value.toLowerCase();
+            var items = document.querySelectorAll('.point-item');
+            
+            items.forEach(function(item, index) {
+                var props = markerList[index].props;
+                var address = props['Адрес'].toLowerCase();
+                if (address.includes(searchText)) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+
+        // Фильтрация по типу покрытия
+        document.getElementById('type-filter').addEventListener('change', function(e) {
+            filterMarkers();
+        });
+
+        // Фильтрация по количеству контейнеров
+        document.getElementById('capacity-filter').addEventListener('change', function(e) {
+            filterMarkers();
+        });
+
+        // Функция фильтрации маркеров
+        function filterMarkers() {
+            var typeFilter = document.getElementById('type-filter').value;
+            var capacityFilter = document.getElementById('capacity-filter').value;
+            
+            markers.clearLayers();
+            
+            markerList.forEach(function(item) {
+                var props = item.props;
+                var show = true;
+                
+                // Фильтр по типу покрытия
+                if (typeFilter !== 'all' && props['покры'] !== typeFilter) {
+                    show = false;
+                }
+                
+                // Фильтр по количеству контейнеров
+                if (capacityFilter !== 'all') {
+                    var capacity = props['Смеш'] || 0;
+                    if (capacityFilter === '1-3' && (capacity < 1 || capacity > 3)) {
+                        show = false;
+                    } else if (capacityFilter === '4-6' && (capacity < 4 || capacity > 6)) {
+                        show = false;
+                    } else if (capacityFilter === '7+' && capacity < 7) {
+                        show = false;
+                    }
+                }
+                
+                if (show) {
+                    markers.addLayer(item.marker);
+                }
+            });
+            
+            map.addLayer(markers);
+        }
+
+        // Кнопка скрытия/показа боковой панели
+        document.querySelector('.toggle-sidebar').addEventListener('click', function() {
+            document.getElementById('sidebar').classList.toggle('hidden');
+            if (document.getElementById('sidebar').classList.contains('hidden')) {
+                document.getElementById('map').style.marginLeft = '0';
+            } else {
+                document.getElementById('map').style.marginLeft = '300px';
+            }
+            map.invalidateSize();
+        });
+
+        // Добавляем легенду
+        var legend = L.control({position: 'bottomright'});
+        legend.onAdd = function(map) {
+            var div = L.DomUtil.create('div', 'info legend');
+            div.innerHTML = `
+                <h4>Легенда</h4>
+                <i class="fas fa-trash-alt" style="color: blue;"></i> Асфальт<br>
+                <i class="fas fa-trash-alt" style="color: green;"></i> Бетон<br>
+                <i class="fas fa-trash-alt" style="color: purple;"></i> Асфальтобетон<br>
+                <i class="fas fa-trash-alt" style="color: orange;"></i> Другое покрытие<br>
+                <hr>
+                Кластеры показывают плотность объектов
+            `;
+            return div;
+        };
+        legend.addTo(map);
+    </script>
+</body>
+</html>
