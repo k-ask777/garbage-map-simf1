@@ -133,14 +133,6 @@
             `;
         }
 
-        // Функция для преобразования координат из EPSG:3857 в WGS84
-        function convertCoords(x, y) {
-            var lon = (x / 20037508.34) * 180;
-            var lat = (y / 20037508.34) * 180;
-            lat = 180/Math.PI * (2 * Math.atan(Math.exp(lat * Math.PI / 180)) - Math.PI / 2);
-            return [lat, lon];
-        }
-
         // Функция для загрузки GeoJSON данных
         function loadGeoJSONData() {
             fetch('data.geojson')
@@ -149,10 +141,10 @@
                     // Обрабатываем каждую точку из GeoJSON
                     data.features.forEach(function(feature) {
                         var props = feature.properties;
-                        var coords = feature.geometry.coordinates;
                         
-                        // Преобразуем координаты
-                        var [lat, lon] = convertCoords(coords[0], coords[1]);
+                        // Используем уже готовые координаты в WGS84 из свойств
+                        var lat = props['СШ']; // Широта
+                        var lon = props['ВД']; // Долгота
                         
                         // Создаем маркер
                         var marker = L.marker([lat, lon], {
